@@ -7,8 +7,8 @@ exports.linkDependencies = exports.findLinkedPackages = exports.readPackageJson 
 const path_1 = require("path");
 const fileFinder_tool_1 = require("../tools/fileFinder.tool");
 const fs_extra_1 = __importDefault(require("fs-extra"));
-const root = process.cwd();
 const findAllPackageJson = async () => {
+    const root = process.cwd();
     const files = (await fileFinder_tool_1.fileFinder(root, 'package.json$', Infinity)).filter(item => !item.dir.includes('node_modules'));
     const allPackages = [];
     files.forEach(({ dir }) => {
@@ -22,11 +22,16 @@ const findAllPackageJson = async () => {
 exports.findAllPackageJson = findAllPackageJson;
 const readPackageJson = async (data) => {
     try {
-        await Promise.allSettled(data.map(async (item) => {
-            const result = await fs_extra_1.default.readFile(path_1.join(item.path, 'package.json'));
-            const packageData = JSON.parse(result.toString());
-            item.name = packageData.name;
-            item.dependencies = Object.entries(packageData.dependencies).map(([name, version]) => ({ name, version: version }));
+        await Promise.all(data.map(async (item) => {
+            try {
+                const result = await fs_extra_1.default.readFile(path_1.join(item.path, 'package.json'));
+                const packageData = JSON.parse(result.toString());
+                item.name = packageData.name;
+                item.dependencies = Object.entries(packageData.dependencies).map(([name, version]) => ({ name, version: version }));
+            }
+            catch (err) {
+                return Promise.resolve();
+            }
         }));
     }
     catch (error) {
@@ -38,8 +43,8 @@ exports.readPackageJson = readPackageJson;
 const findLinkedPackages = (data) => {
     data.forEach(item => {
         item.dependencies = item.dependencies
-            .filter(({ version }) => version.startsWith('sg-link:'))
-            .map(({ name, version }) => {
+            ?.filter?.(({ version }) => version.startsWith('sg-link:'))
+            ?.map?.(({ name, version }) => {
             const [_, ...outDir] = version.split(':');
             return {
                 name,
@@ -53,12 +58,15 @@ const findLinkedPackages = (data) => {
 exports.findLinkedPackages = findLinkedPackages;
 const linkDependencies = async (data) => {
     const symlinkPromises = data.flatMap(item => {
-        return item.dependencies.map(async (d) => {
+        return item.dependencies?.map?.(async (d) => {
             try {
                 const source = path_1.join(d.path, d.outDir);
                 const destination = path_1.join(item.path, './node_modules', d.name);
                 if (!(await fs_extra_1.default.pathExists(path_1.dirname(destination)))) {
                     await fs_extra_1.default.mkdirp(path_1.dirname(destination));
+                }
+                if (fs_extra_1.default.existsSync(destination) && (await fs_extra_1.default.lstat(destination)).isSymbolicLink()) {
+                    await fs_extra_1.default.unlink(destination);
                 }
                 await fs_extra_1.default.symlink(source, destination, 'junction');
                 console.log(`Symlink created from ${source} to ${destination}`);
@@ -68,6 +76,6 @@ const linkDependencies = async (data) => {
             }
         });
     });
-    await Promise.allSettled(symlinkPromises);
+    await Promise.all(symlinkPromises);
 };
 exports.linkDependencies = linkDependencies;

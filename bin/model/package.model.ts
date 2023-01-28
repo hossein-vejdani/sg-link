@@ -11,9 +11,8 @@ type Package = {
     _allPackages?: Package[]
 }
 
-const root = process.cwd()
-
 export const findAllPackageJson = async (): Promise<Package[]> => {
+    const root = process.cwd()
     const files = (await fileFinder(root, 'package.json$', Infinity)).filter(item => !item.dir.includes('node_modules'))
     const allPackages: Package[] = []
 
@@ -29,12 +28,17 @@ export const findAllPackageJson = async (): Promise<Package[]> => {
 
 export const readPackageJson = async (data: Package[]): Promise<Package[]> => {
     try {
-        await Promise.allSettled(
+        await Promise.all(
             data.map(async item => {
-                const result = await fs.readFile(join(item.path, 'package.json'))
-                const packageData = JSON.parse(result.toString())
-                item.name = packageData.name
-                item.dependencies = Object.entries(packageData.dependencies).map(([name, version]) => ({ name, version: version as string }))
+                try {
+                    const result = await fs.readFile(join(item.path, 'package.json'))
+
+                    const packageData = JSON.parse(result.toString())
+                    item.name = packageData.name
+                    item.dependencies = Object.entries(packageData.dependencies).map(([name, version]) => ({ name, version: version as string }))
+                } catch (err) {
+                    return Promise.resolve()
+                }
             })
         )
     } catch (error) {
@@ -46,8 +50,8 @@ export const readPackageJson = async (data: Package[]): Promise<Package[]> => {
 export const findLinkedPackages = (data: Package[]): Package[] => {
     data.forEach(item => {
         item.dependencies = item.dependencies
-            .filter(({ version }) => version.startsWith('sg-link:'))
-            .map(({ name, version }) => {
+            ?.filter?.(({ version }) => version.startsWith('sg-link:'))
+            ?.map?.(({ name, version }) => {
                 const [_, ...outDir] = version.split(':')
                 return {
                     name,
@@ -61,12 +65,15 @@ export const findLinkedPackages = (data: Package[]): Package[] => {
 
 export const linkDependencies = async (data: Package[]): Promise<void> => {
     const symlinkPromises = data.flatMap(item => {
-        return item.dependencies.map(async d => {
+        return item.dependencies?.map?.(async d => {
             try {
                 const source = join(d.path, d.outDir)
                 const destination = join(item.path, './node_modules', d.name)
                 if (!(await fs.pathExists(dirname(destination)))) {
                     await fs.mkdirp(dirname(destination))
+                }
+                if (fs.existsSync(destination) && (await fs.lstat(destination)).isSymbolicLink()) {
+                    await fs.unlink(destination)
                 }
                 await fs.symlink(source, destination, 'junction')
                 console.log(`Symlink created from ${source} to ${destination}`)
@@ -75,5 +82,5 @@ export const linkDependencies = async (data: Package[]): Promise<void> => {
             }
         })
     })
-    await Promise.allSettled(symlinkPromises)
+    await Promise.all(symlinkPromises)
 }
