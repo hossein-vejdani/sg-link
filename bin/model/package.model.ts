@@ -71,10 +71,10 @@ export const linkDependencies = async (data: Package[]): Promise<void> => {
                 const destination = join(item.path, './node_modules', d.name)
                 if (!(await fs.pathExists(dirname(destination)))) {
                     await fs.mkdirp(dirname(destination))
+                } else {
+                    await fs.rmdir(destination, { recursive: true })
                 }
-                if (fs.existsSync(destination) && (await fs.lstat(destination)).isSymbolicLink()) {
-                    await fs.unlink(destination)
-                }
+
                 await fs.symlink(source, destination, 'junction')
                 console.log(`Symlink created from ${source} to ${destination}`)
             } catch (err) {

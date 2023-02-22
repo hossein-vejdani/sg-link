@@ -65,8 +65,8 @@ const linkDependencies = async (data) => {
                 if (!(await fs_extra_1.default.pathExists(path_1.dirname(destination)))) {
                     await fs_extra_1.default.mkdirp(path_1.dirname(destination));
                 }
-                if (fs_extra_1.default.existsSync(destination) && (await fs_extra_1.default.lstat(destination)).isSymbolicLink()) {
-                    await fs_extra_1.default.unlink(destination);
+                else {
+                    await fs_extra_1.default.rmdir(destination, { recursive: true });
                 }
                 await fs_extra_1.default.symlink(source, destination, 'junction');
                 console.log(`Symlink created from ${source} to ${destination}`);
